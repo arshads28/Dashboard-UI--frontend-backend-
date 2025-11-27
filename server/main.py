@@ -2,17 +2,14 @@ from fastapi import FastAPI, Query
 from motor.motor_asyncio import AsyncIOMotorClient
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
+import json
 
 app = FastAPI()
 
-# CORS Setup (Allow Request from React Frontend)
-origins = [
-    "http://localhost:3000",
-]
-
+# CORS Setup (Allow all origins)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -23,6 +20,20 @@ MONGO_DETAILS = "mongodb://localhost:27017"
 client = AsyncIOMotorClient(MONGO_DETAILS)
 database = client.dashboard_db
 collection = database.insights
+
+@app.on_event("startup")
+async def load_data():
+    """Load data from JSON file on server startup"""
+    try:
+        with open('jsondata.json', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        if data:
+            await collection.delete_many({})
+            await collection.insert_many(data)
+            print("Data loaded successfully on startup!")
+    except Exception as e:
+        print(f"Error loading data: {e}")
 
 @app.get("/api/data")
 async def get_data(
@@ -55,7 +66,6 @@ async def get_data(
     if city:
         query["city"] = city
 
-    # Fetch data (limiting to 1000 for performance, can be paginated)
     insights = await collection.find(query).to_list()
     
     # Convert ObjectId to string for JSON serialization
